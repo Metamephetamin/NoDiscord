@@ -47,7 +47,9 @@ const string MediaAccessTokenCookieName = "tend_access_token";
 const long MaxChatFileUploadBytes = 100L * 1024 * 1024;
 const long MultipartRequestOverheadBytes = 1L * 1024 * 1024;
 var maxChatFileUploadRequestBytes = checked(
-    GetConfiguredPositiveLong(builder.Configuration, "ChatFiles:MaxFileSizeBytes", MaxChatFileUploadBytes) +
+    Math.Max(
+        GetConfiguredPositiveLong(builder.Configuration, "ChatFiles:MaxFileSizeBytes", MaxChatFileUploadBytes),
+        ChatFileUploadLimitPolicy.PersonalMaxFileSizeBytes) +
     MultipartRequestOverheadBytes);
 
 builder.Services.AddDbContext<AppDbContext>(options =>

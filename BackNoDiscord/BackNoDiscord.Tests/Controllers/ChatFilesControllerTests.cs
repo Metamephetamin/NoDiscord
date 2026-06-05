@@ -79,6 +79,67 @@ public sealed class ChatFilesControllerTests : IDisposable
         Assert.False(document.RootElement.TryGetProperty("storage", out _));
     }
 
+    [Fact]
+    public async Task Upload_UsesPersonalLimitForPersistedEmail()
+    {
+        var controller = BuildController(userEmail: "andrey1689123@gmail.com");
+        var request = BuildMultipartRequest("upload.txt", "text/plain", Encoding.UTF8.GetBytes("hello"));
+        controller.ControllerContext.HttpContext.Request.Method = request.Method;
+        controller.ControllerContext.HttpContext.Request.ContentType = request.ContentType;
+        controller.ControllerContext.HttpContext.Request.ContentLength = 6L * 1024 * 1024 * 1024;
+        controller.ControllerContext.HttpContext.Request.Body = request.Body;
+
+        var result = await controller.Upload(CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task Upload_KeepsDefaultQuotaForOtherPersistedEmail()
+    {
+        var controller = BuildController(userEmail: "someone@example.com");
+        var request = BuildMultipartRequest("upload.txt", "text/plain", Encoding.UTF8.GetBytes("hello"));
+        controller.ControllerContext.HttpContext.Request.Method = request.Method;
+        controller.ControllerContext.HttpContext.Request.ContentType = request.ContentType;
+        controller.ControllerContext.HttpContext.Request.ContentLength = 6L * 1024 * 1024 * 1024;
+        controller.ControllerContext.HttpContext.Request.Body = request.Body;
+
+        var result = await controller.Upload(CancellationToken.None);
+
+        var tooLarge = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status413PayloadTooLarge, tooLarge.StatusCode);
+        var json = System.Text.Json.JsonSerializer.Serialize(tooLarge.Value);
+        Assert.Contains("User storage quota exceeded.", json);
+    }
+
+    [Fact]
+    public void ChatFileUploadLimitPolicy_AppliesThirtyGigabytesForPersonalEmail()
+    {
+        var configured = new StreamedChatFileUploadLimits(
+            500L * 1024 * 1024,
+            5L * 1024 * 1024 * 1024,
+            1L * 1024 * 1024 * 1024);
+
+        var limits = ChatFileUploadLimitPolicy.ApplyPersonalLimits("andrey1689123@gmail.com", configured);
+
+        Assert.Equal(30L * 1024 * 1024 * 1024, limits.MaxFileSizeBytes);
+        Assert.Equal(30L * 1024 * 1024 * 1024, limits.MaxUserStorageBytes);
+        Assert.Equal(configured.MinFreeDiskBytes, limits.MinFreeDiskBytes);
+    }
+
+    [Fact]
+    public void ChatFileUploadLimitPolicy_KeepsConfiguredLimitsForOtherEmails()
+    {
+        var configured = new StreamedChatFileUploadLimits(
+            500L * 1024 * 1024,
+            5L * 1024 * 1024 * 1024,
+            1L * 1024 * 1024 * 1024);
+
+        var limits = ChatFileUploadLimitPolicy.ApplyPersonalLimits("someone@example.com", configured);
+
+        Assert.Equal(configured, limits);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_storageRoot))
@@ -87,7 +148,7 @@ public sealed class ChatFilesControllerTests : IDisposable
         }
     }
 
-    private ChatFilesController BuildController(IChatFileUploadStorageMetrics? storageMetrics = null)
+    private ChatFilesController BuildController(IChatFileUploadStorageMetrics? storageMetrics = null, string? userEmail = null)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -96,9 +157,25 @@ public sealed class ChatFilesControllerTests : IDisposable
             })
             .Build();
         var dbContext = CreateContext();
+        if (!string.IsNullOrWhiteSpace(userEmail))
+        {
+            dbContext.Users.Add(new User
+            {
+                id = 42,
+                first_name = "Test",
+                last_name = "User",
+                nickname = "tester",
+                email = userEmail,
+                password_hash = "hash",
+                is_email_verified = true
+            });
+            dbContext.SaveChanges();
+        }
+
         var controller = new ChatFilesController(
             new UploadStoragePaths(configuration, new TestWebHostEnvironment()),
             configuration,
+            dbContext,
             storageMetrics ?? new TestStorageMetrics(),
             new ChatFileAccessService(dbContext, new ServerStateService(dbContext)),
             new UserStorageQuotaService(dbContext),

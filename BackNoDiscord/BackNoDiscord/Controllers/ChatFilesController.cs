@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 
 namespace BackNoDiscord.Controllers;
 
@@ -42,6 +43,7 @@ public class ChatFilesController : ControllerBase
     };
     private readonly UploadStoragePaths _uploadStoragePaths;
     private readonly IConfiguration _configuration;
+    private readonly AppDbContext _dbContext;
     private readonly IChatFileUploadStorageMetrics _storageMetrics;
     private readonly ChatFileAccessService _chatFileAccess;
     private readonly UserStorageQuotaService _quotaService;
@@ -50,6 +52,7 @@ public class ChatFilesController : ControllerBase
     public ChatFilesController(
         UploadStoragePaths uploadStoragePaths,
         IConfiguration configuration,
+        AppDbContext dbContext,
         IChatFileUploadStorageMetrics storageMetrics,
         ChatFileAccessService chatFileAccess,
         UserStorageQuotaService quotaService,
@@ -57,6 +60,7 @@ public class ChatFilesController : ControllerBase
     {
         _uploadStoragePaths = uploadStoragePaths;
         _configuration = configuration;
+        _dbContext = dbContext;
         _storageMetrics = storageMetrics;
         _chatFileAccess = chatFileAccess;
         _quotaService = quotaService;
@@ -73,7 +77,7 @@ public class ChatFilesController : ControllerBase
             return Unauthorized();
         }
 
-        var limits = ResolveUploadLimits();
+        var limits = await ResolveUploadLimitsAsync(currentUser.UserId, cancellationToken);
         ApplyRequestBodyLimit(limits);
         var uploadsDirectory = _uploadStoragePaths.ResolveDirectory("chat-files");
         try
@@ -133,7 +137,24 @@ public class ChatFilesController : ControllerBase
         }
     }
 
-    private StreamedChatFileUploadLimits ResolveUploadLimits()
+    private async Task<StreamedChatFileUploadLimits> ResolveUploadLimitsAsync(string userId, CancellationToken cancellationToken)
+    {
+        var limits = ResolveConfiguredUploadLimits();
+        if (!int.TryParse(userId, out var numericUserId))
+        {
+            return limits;
+        }
+
+        var email = await _dbContext.Users
+            .AsNoTracking()
+            .Where(item => item.id == numericUserId)
+            .Select(item => item.email)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return ChatFileUploadLimitPolicy.ApplyPersonalLimits(email, limits);
+    }
+
+    private StreamedChatFileUploadLimits ResolveConfiguredUploadLimits()
     {
         var maxFileSizeBytes = GetConfiguredBytes("ChatFiles:MaxFileSizeBytes", DefaultMaxFileSizeBytes);
         var maxUserStorageBytes = Math.Max(

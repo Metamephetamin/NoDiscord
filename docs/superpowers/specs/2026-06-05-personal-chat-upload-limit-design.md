@@ -10,6 +10,8 @@ The backend remains the source of truth. `ChatFilesController` will load the aut
 
 The personal limit also raises the effective user storage quota to at least `30 GB`, so one allowed file is not blocked by the default `5 GB` storage quota. Request body limits continue to be derived from the effective per-request file limit plus multipart overhead.
 
+Production nginx `client_max_body_size` must allow the same request size, otherwise uploads are rejected before ASP.NET Core can apply the per-user policy.
+
 ## Frontend
 
 The renderer and Electron attachment picker currently reject files above `500 MB` before the server sees them. Raise the client-side chat file picker/send limit to `30 GB` so the personal account can select and send large files. The server still rejects oversized uploads for all non-personal accounts.
@@ -24,5 +26,6 @@ Add backend controller tests that verify:
 
 - `andrey1689123@gmail.com` receives a `30 GB` max file limit and a storage quota of at least `30 GB`.
 - Other users keep configured/default limits.
+- The upload controller uses the persisted user email, not only client-provided or token-provided state.
 
 Update the frontend source policy test to expect a `30 GB` chat file policy in the renderer and Electron attachment picker.
